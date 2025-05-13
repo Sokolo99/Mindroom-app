@@ -1,230 +1,107 @@
-import { rqClient } from "@/shared/api/instance";
-import type { ApiSchemas } from "@/shared/api/schema";
-import { ROUTES } from "@/shared/model/routes";
 import { Button } from "@/shared/ui/kit/button";
-import { Card, CardFooter, CardHeader } from "@/shared/ui/kit/card";
-import { Input } from "@/shared/ui/kit/input";
-import { Label } from "@radix-ui/react-label";
-import { useQueryClient } from "@tanstack/react-query";
-import { href, Link } from "react-router-dom";
-import {
-  Select,
-  SelectContent,
-  SelectItem,
-  SelectTrigger,
-  SelectValue,
-} from "@/shared/ui/kit/select";
-import { Tabs, TabsList, TabsTrigger } from "@/shared/ui/kit/tabs";
-import { Switch } from "@/shared/ui/kit/switch";
-import { useBoardsList } from "./use-boards-list";
-import { useBoardsFilters, type BoardsSortOption } from "./use-boards-filters";
+import { useBoardsList } from "./model/use-boards-list.ts";
+import { useBoardsFilters } from "./model/use-boards-filters.ts";
 import { useDebounceValue } from "@/shared/lib/react";
+import { useBoardsCreate } from "./model/use-boards-create.ts";
+import { PlusIcon } from "lucide-react";
+import {
+  BoardsListLayout,
+  BoardsListLayoutContent,
+  BoardsListLayoutFilters,
+  BoardsListLayoutHeader,
+} from "./ui/boards-list-layout.tsx";
+import { ViteModelToggle, type ViteMode } from "./ui/vite-model-toggle.tsx";
+import { useState } from "react";
+import { BoardsSortSelect } from "./ui/boards-sort-select.tsx";
+import { BoardsSearchInput } from "./ui/boards-search-input.tsx";
+import { BoardItem } from "./compose/board-item.tsx";
+import { BoardCard } from "./compose/board-card.tsx";
+import { BoardsSidebar } from "./ui/boards-sidebar.tsx";
+import { TemplatesGallery, TemplatesModal, useTemplatesModal } from "@/features/board-templates";
 
 function BoardsListPage() {
-  const queryClient = useQueryClient();
-
   const boardsFilters = useBoardsFilters();
   const boardsQuery = useBoardsList({
     sort: boardsFilters.sort,
     search: useDebounceValue(boardsFilters.search, 300),
   });
 
-  // Обновляем список досок при получении новых данных
-  // useEffect(() => {
-  //   if (boardsQuery.data?.list) {
-  //     if (page === 1) {
-  //       setBoards(boardsQuery.data.list);
-  //     } else {
-  //       setBoards((prev) => [...prev, ...boardsQuery.data.list]);
-  //     }
-  //     setHasMore(page < (boardsQuery.data.totalPages || 1));
-  //     setIsLoadingMore(false);
-  //   }
-  // }, [boardsQuery.data, page]);
+  const templatesModal = useTemplatesModal();
 
-  // // Функция для загрузки следующей страницы
-  // const loadMore = useCallback(() => {
-  //   if (!isLoadingMore && hasMore && !boardsQuery.isPending) {
-  //     setIsLoadingMore(true);
-  //     setPage((prevPage) => prevPage + 1);
-  //   }
-  // }, [isLoadingMore, hasMore, boardsQuery.isPending]);
+  const createBoard = useBoardsCreate();
 
-  // Настройка IntersectionObserver для бесконечной прокрутки
-
-  const createBoardMutation = rqClient.useMutation("post", "/boards", {
-    onSettled: async () => {
-      await queryClient.invalidateQueries(
-        rqClient.queryOptions("get", "/boards"),
-      );
-    },
-  });
-
-  const deleteBoardMutation = rqClient.useMutation(
-    "delete",
-    "/boards/{boardId}",
-    {
-      onSettled: async () => {
-        await queryClient.invalidateQueries(
-          rqClient.queryOptions("get", "/boards"),
-        );
-      },
-    },
-  );
-
-  const toggleFavoriteMutation = rqClient.useMutation(
-    "put",
-    "/boards/{boardId}/favorite",
-    {
-      onSettled: async () => {
-        await queryClient.invalidateQueries(
-          rqClient.queryOptions("get", "/boards"),
-        );
-      },
-    },
-  );
-
-  const handleToggleFavorite = (board: ApiSchemas["Board"]) => {
-    toggleFavoriteMutation.mutate({
-      params: { path: { boardId: board.id } },
-      body: { isFavorite: !board.isFavorite },
-    });
-  };
+  const [viteMode, setViteMode] = useState<ViteMode>("list");
 
   return (
-    <div className="container mx-auto p-4">
-      <h1 className="text-2xl font-bold mb-6">Доски {"CONFIG.API_BASE_URL"}</h1>
-
-      <div className="mb-8 grid grid-cols-1 md:grid-cols-4 gap-4">
-        <div className="md:col-span-3">
-          <Label htmlFor="search">Поиск</Label>
-          <Input
-            id="search"
-            placeholder="Введите название доски..."
-            value={boardsFilters.search}
-            onChange={(e) => boardsFilters.setSearch(e.target.value)}
-            className="w-full"
-          />
-        </div>
-
-        <div className="flex flex-col">
-          <Label htmlFor="sort">Сортировка</Label>
-          <Select
-            value={boardsFilters.sort}
-            onValueChange={(value) =>
-              boardsFilters.setSort(value as BoardsSortOption)
+    <>
+      <TemplatesModal />
+      <BoardsListLayout
+        template={<TemplatesGallery />}
+        sidebar={<BoardsSidebar />}
+        header={
+          <BoardsListLayoutHeader
+            title="Доска"
+            description="Здесь вы можите просматривать и управлять совими досками"
+            actions={
+              <>
+                <Button variant='outline' onClick={templatesModal.open}>
+                  Выбрать шаблон
+                </Button>
+                <Button
+                  variant="success"
+                  disabled={createBoard.isPending}
+                  onClick={createBoard.createBoard}
+                >
+                  <PlusIcon />
+                  Создать доску
+                </Button>
+              </>
             }
-          >
-            <SelectTrigger id="sort" className="w-full">
-              <SelectValue placeholder="Сортировка" />
-            </SelectTrigger>
-            <SelectContent>
-              <SelectItem value="lastOpenedAt">По дате открытия</SelectItem>
-              <SelectItem value="createdAt">По дате создания</SelectItem>
-              <SelectItem value="updatedAt">По дате обновления</SelectItem>
-              <SelectItem value="name">По имени</SelectItem>
-            </SelectContent>
-          </Select>
-        </div>
-      </div>
-
-      <Tabs defaultValue="all" className="mb-6">
-        <TabsList>
-          <TabsTrigger value="all">Все доски</TabsTrigger>
-          <TabsTrigger value="favorites">Избранные</TabsTrigger>
-        </TabsList>
-      </Tabs>
-
-      <div className="mb-8">
-        <form
-          className="flex gap-4 items-end"
-          onSubmit={(e) => {
-            e.preventDefault();
-            createBoardMutation.mutate({});
-            e.currentTarget.reset();
-          }}
-        >
-          <div className="flex-grow">
-            <Label htmlFor="board-name">Название новой доски</Label>
-            <Input
-              id="board-name"
-              name="name"
-              placeholder="Введите название..."
-            />
-          </div>
-          <Button type="submit" disabled={createBoardMutation.isPending}>
-            Создать доску
-          </Button>
-        </form>
-      </div>
-
-      {boardsQuery.isPending ? (
-        <div className="text-center py-10">Загрузка...</div>
-      ) : (
-        <>
-          <div className="grid grid-cols-1 md:grid-cols-2 lg:grid-cols-3 gap-6">
-            {boardsQuery.boards.map((board) => (
-              <Card key={board.id} className="relative">
-                <div className="absolute top-2 right-2 flex items-center gap-2">
-                  <Switch
-                    checked={board.isFavorite}
-                    onCheckedChange={() => handleToggleFavorite(board)}
-                  />
-                  <span className="text-sm text-gray-500">
-                    {board.isFavorite ? "В избранном" : ""}
-                  </span>
-                </div>
-                <CardHeader>
-                  <div className="flex flex-col gap-2">
-                    <Button
-                      asChild
-                      variant="link"
-                      className="text-left justify-start h-auto p-0"
-                    >
-                      <Link to={href(ROUTES.BOARD, { boardId: board.id })}>
-                        <span className="text-xl font-medium">
-                          {board.name}
-                        </span>
-                      </Link>
-                    </Button>
-                    <div className="text-sm text-gray-500">
-                      Создано: {new Date(board.createdAt).toLocaleDateString()}
-                    </div>
-                    <div className="text-sm text-gray-500">
-                      Последнее открытие:{" "}
-                      {new Date(board.lastOpenedAt).toLocaleDateString()}
-                    </div>
-                  </div>
-                </CardHeader>
-                <CardFooter>
-                  <Button
-                    variant="destructive"
-                    disabled={deleteBoardMutation.isPending}
-                    onClick={() =>
-                      deleteBoardMutation.mutate({
-                        params: { path: { boardId: board.id } },
-                      })
-                    }
-                  >
-                    Удалить
-                  </Button>
-                </CardFooter>
-              </Card>
-            ))}
-          </div>
-
-          {boardsQuery.boards.length === 0 && !boardsQuery.isPending && (
-            <div className="text-center py-10">Доски не найдены</div>
-          )}
-
-          {boardsQuery.hasNextPage && (
-            <div ref={boardsQuery.cursorRef} className="text-center py-8">
-              {"Загрузка дополнительных досок..."}
-            </div>
-          )}
-        </>
-      )}
-    </div>
+          />
+        }
+        filters={
+          <BoardsListLayoutFilters
+            sort={
+              <BoardsSortSelect
+                value={boardsFilters.sort}
+                onValueChange={boardsFilters.setSort}
+              />
+            }
+            filters={
+              <BoardsSearchInput
+                value={boardsFilters.search}
+                onChange={boardsFilters.setSearch}
+              />
+            }
+            actions={
+              <ViteModelToggle
+                value={viteMode}
+                onChange={(value) => setViteMode(value)}
+              />
+            }
+          />
+        }
+      >
+        <BoardsListLayoutContent
+          isEmpty={boardsQuery.boards.length === 0}
+          isPending={boardsQuery.isPending}
+          isPendingNext={boardsQuery.isFetchingNextPage}
+          cursorRef={boardsQuery.cursorRef}
+          hasCursor={boardsQuery.hasNextPage}
+          mode={viteMode}
+          renderList={() =>
+            boardsQuery.boards.map((board) => (
+              <BoardItem key={board.id} board={board} />
+            ))
+          }
+          renderCards={() =>
+            boardsQuery.boards.map((board) => (
+              <BoardCard key={board.id} board={board} />
+            ))
+          }
+        />
+      </BoardsListLayout>
+    </>
   );
 }
 
